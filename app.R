@@ -2,24 +2,38 @@
 
 # Required Libraries
 library(shiny)
-library(forecast)  # For AutoARIMA
-library(duckdb)    # For DuckDB connections
+library(forecast)  
+library(duckdb)    
 library(dplyr)
 library(thematic)
 library(plotly)
-library(ggplot2)   # Plotting
-library(bslib)     # For Bootstrap theming and layout
+library(ggplot2)   
+library(bslib)    
 
-# Set the default theme for plots
-ggplot2::theme_set(ggplot2::theme_minimal())
 
 # Define UI for the application with bslib theme
 ui <- page_sidebar(
   # Apply bslib theme
   theme = bs_theme(
     version = 5,                    # Using Bootstrap 5
-    bootswatch = "darkly",            # Pre-built theme from Bootswatch          
+    bootswatch = "flatly",            # Pre-built theme from Bootswatch          
   ),
+  
+  tags$style(HTML("
+    .card-header {
+      background-color: #18bc9c;
+      color: white;
+      font-weight: bold;
+    }
+    .sidebar {
+      background-color: #f7f7f7; /* Secondary color */
+      color: white;
+    }
+    .main-panel {
+      background-color: #2c3e50; /* Primary color */
+      color: white;
+    }
+  ")),
   
   # Sidebar content
   sidebar = sidebar(
