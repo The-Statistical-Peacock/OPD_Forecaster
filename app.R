@@ -14,9 +14,11 @@ library(bslib)
 # Define UI for the application with bslib theme
 ui <- page_sidebar(
   # Apply bslib theme
-  tags$head(
-    tags$link(rel = "stylesheet", type = "text/css", href = "flatly.min.css") # Replace with your actual file path if needed
+  theme = bs_theme(
+    version = 5,                   
+    bootswatch = "darkly",                
   ),
+  
   
   # Sidebar content
   sidebar = sidebar(
