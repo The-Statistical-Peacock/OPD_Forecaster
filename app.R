@@ -14,26 +14,9 @@ library(bslib)
 # Define UI for the application with bslib theme
 ui <- page_sidebar(
   # Apply bslib theme
-  theme = bs_theme(
-    version = 5,                    # Using Bootstrap 5
-    bootswatch = "flatly",            # Pre-built theme from Bootswatch          
+  tags$head(
+    tags$link(rel = "stylesheet", type = "text/css", href = "flatly.min.css") # Replace with your actual file path if needed
   ),
-  
-  tags$style(HTML("
-    .card-header {
-      background-color: #18bc9c;
-      color: white;
-      font-weight: bold;
-    }
-    .sidebar {
-      background-color: #f7f7f7; /* Secondary color */
-      color: white;
-    }
-    .main-panel {
-      background-color: #2c3e50; /* Primary color */
-      color: white;
-    }
-  ")),
   
   # Sidebar content
   sidebar = sidebar(
