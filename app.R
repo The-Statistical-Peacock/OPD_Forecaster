@@ -16,16 +16,16 @@ ui <- page_sidebar(
   # Apply bslib theme
   theme = bs_theme(
     version = 5,                   
-    bootswatch = "darkly",                
+    bootswatch = "flatly",                
   ),
   
-  
+
   # Sidebar content
   sidebar = sidebar(
-    h4("Filters"),
+    h4("Select Hospital & Specialty"),
     selectInput("hospital", "Select Hospital:", choices = NULL),
     selectInput("specialty", "Select Specialty:", choices = NULL),
-    actionButton("predict", "Predict Next 12 Weeks")
+    actionButton("predict", "Predict Next 12 Weeks", class = 'btn-success')
   ),
   
   # Main panel content with cards and columns
@@ -34,13 +34,13 @@ ui <- page_sidebar(
     
     # First column: Card for plot
     card(
-      card_header("AutoARIMA Prediction for Outpaitent Waiting List Numbers"),
+      card_header("AutoARIMA Prediction for Outpaitent Waiting List Numbers", style = "background-color: #18BC9C; color: white;"),
       plotlyOutput("forecastPlot")
     ),
     
     # Second column: Card for table
     card(
-      card_header("Forecasted Values"),
+      card_header("Forecasted Values", style = "background-color: #18BC9C; color: white;"),
       tableOutput("forecastTable")
     )
   )
@@ -117,28 +117,28 @@ server <- function(input, output, session) {
         Total = round(as.numeric(data$Total))
       )
       
-      # Plot using your specified styling
+      # Plot using Flatly styling
       p <- plot_ly() %>%
         add_trace(data = actual_df, x = ~Date, y = ~Total, 
                   type = 'scatter', mode = 'lines+markers',
-                  marker = list(color = "#5F3DC4", size = 8, line = list(color = '#9BAAB3', width = 2)),
-                  line = list(shape = 'spline', smoothing = 1.3, color = "#5F3DC4", width = 3),
+                  marker = list(color = "#007BFF", size = 8, line = list(color = '#CCCCCC', width = 2)),  # Flatly primary color
+                  line = list(shape = 'spline', smoothing = 1.3, color = "#007BFF", width = 3),
                   name = "Actual") %>%
         add_trace(data = forecast_df, x = ~Date, y = ~Forecast, 
                   type = 'scatter', mode = 'lines+markers',
-                  marker = list(color = "#FF7F0E", size = 8, line = list(color = '#9BAAB3', width = 2)),
-                  line = list(shape = 'spline', smoothing = 1.3, color = "#FF7F0E", width = 3),
+                  marker = list(color = "#28A745", size = 8, line = list(color = '#CCCCCC', width = 2)),  # Flatly success color
+                  line = list(shape = 'spline', smoothing = 1.3, color = "#28A745", width = 3),
                   name = "Forecast") %>%
         add_ribbons(data = forecast_df, x = ~Date, ymin = ~Lower_80, ymax = ~Upper_80, 
-                    fillcolor = 'rgba(92, 184, 92, 0.1)', line = list(width = 0), name = "80% CI") %>%
+                    fillcolor = 'rgba(40, 167, 69, 0.2)', line = list(width = 0), name = "80% CI") %>%
         add_ribbons(data = forecast_df, x = ~Date, ymin = ~Lower_95, ymax = ~Upper_95, 
-                    fillcolor = 'rgba(92, 184, 92, 0.2)', line = list(width = 0), name = "95% CI") %>% 
+                    fillcolor = 'rgba(40, 167, 69, 0.4)', line = list(width = 0), name = "95% CI") %>% 
         layout(title = "",
-               xaxis = list(title = "", type = "date", tickangle = 45, tickfont = list(size = 12, color = 'white'), showgrid = FALSE, tickformat = '%d-%b-%y'),
-               yaxis = list(title = "", tickfont = list(size = 12, color = 'white'), tickformat = ".0f", showgrid = FALSE),  # Change format to whole numbers
-               paper_bgcolor = '#5A5A5A',  
-               plot_bgcolor = '#5A5A5A',
-               legend = list(font = list(color = 'white')), 
+               xaxis = list(title = "", type = "date", tickangle = 45, tickfont = list(size = 12, color = 'black'), showgrid = FALSE, tickformat = '%d-%b-%y'),
+               yaxis = list(title = "", tickfont = list(size = 12, color = 'black'), tickformat = ".0f", showgrid = FALSE),  # Change format to whole numbers
+               paper_bgcolor = '#F8F9FA',  # Flatly light background
+               plot_bgcolor = '#F8F9FA',   # Flatly light background
+               legend = list(font = list(color = 'black')), 
                font = list(size = 14),
                margin = list(b = 50)) %>%
         config(displayModeBar = FALSE)
