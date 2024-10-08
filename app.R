@@ -7,11 +7,7 @@ library(duckdb)
 library(dplyr)
 library(thematic)
 library(plotly)
-<<<<<<< HEAD
-library(ggplot2)
-=======
 library(ggplot2)   
->>>>>>> 6a0fb6cd9a46ad417cd7afe3ad2728f6e62aefd5
 library(bslib)    
 
 
@@ -26,7 +22,7 @@ ui <- page_sidebar(
 
   # Sidebar content
   sidebar = sidebar(
-    h4("Select Hospital & Specialty"),
+    h4("Filters"),
     selectInput("hospital", "Select Hospital:", choices = NULL),
     selectInput("specialty", "Select Specialty:", choices = NULL),
     actionButton("predict", "Predict Next 12 Weeks", class = 'btn-success')
@@ -181,7 +177,7 @@ server <- function(input, output, session) {
       # Return forecasted values with actual dates
       forecast_table <- data.frame(
         Week = formatted_dates,
-        Forecast = round(as.numeric(forecast_data$mean))  # Round to nearest whole number
+        Forecast = as.integer(round(as.numeric(forecast_data$mean)))  # Round to nearest whole number
       )
       
       return(forecast_table)
