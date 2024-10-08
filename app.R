@@ -2,13 +2,13 @@
 
 # Required Libraries
 library(shiny)
-library(forecast)  # For AutoARIMA
-library(duckdb)    # For DuckDB connections
+library(forecast)  
+library(duckdb)    
 library(dplyr)
 library(thematic)
 library(plotly)
-library(ggplot2)   # Plotting
-library(bslib)     # For Bootstrap theming and layout
+library(ggplot2)
+library(bslib)    
 
 # Set the default theme for plots
 ggplot2::theme_set(ggplot2::theme_minimal())
