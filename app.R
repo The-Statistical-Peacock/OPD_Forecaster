@@ -2,6 +2,7 @@
 
 # Required Libraries
 library(shiny)
+library(prophet)
 library(forecast)  
 library(duckdb)    
 library(dplyr)
@@ -34,47 +35,38 @@ ui <- page_sidebar(
     
     # First column: Card for plot
     card(
-      card_header("AutoARIMA Prediction for Outpaitent Waiting List Numbers", style = "background-color: #18BC9C; color: white;"),
+      card_header("Prophet Predictions for Outpatient Waiting List Numbers", style = "background-color: #18BC9C; color: white;"),
       plotlyOutput("forecastPlot")
     ),
     
     # Second column: Card for table
     card(
-      card_header("Forecasted Values", style = "background-color: #18BC9C; color: white;"),
+      card_header("Forecasted Number of OPD Patients", style = "background-color: #18BC9C; color: white;"),
       tableOutput("forecastTable")
     )
   )
 )
 
-# Modified server function with proper column name quoting
+
+#------------------Server Function---------------------#
 server <- function(input, output, session) {
-  # Connect to DuckDB
   con <- dbConnect(duckdb::duckdb(), dbdir = "NTPF_WL.duckdb")
   
-  # Populate Hospital dropdown dynamically and sort hospitals alphabetically
   hospitals_query <- 'SELECT DISTINCT "hospital name" FROM OPD ORDER BY "hospital name" ASC'
   updateSelectInput(session, "hospital", choices = dbGetQuery(con, hospitals_query)$`hospital name`)
   
-  # Reactive expression to update Specialty based on selected hospital
   observeEvent(input$hospital, {
     if (!is.null(input$hospital)) {
-      # Escape single quotes in the hospital name
       safe_hospital_name <- gsub("'", "''", input$hospital)
-      
-      # Query to get specialties related to the selected hospital
       specialties_query <- paste0(
         'SELECT DISTINCT "Specialty" FROM OPD WHERE "hospital name" = \'', safe_hospital_name, '\' ORDER BY "Specialty" ASC'
       )
       specialties <- dbGetQuery(con, specialties_query)$Specialty
-      
-      # Update the Specialty selectInput based on the query result
       updateSelectInput(session, "specialty", choices = specialties)
     }
   })
   
-  # Reactive expression to fetch and filter the data based on user input
   filtered_data <- eventReactive(input$predict, {
-    # Escape single quotes in the hospital and specialty names
     safe_hospital_name <- gsub("'", "''", input$hospital)
     safe_specialty <- gsub("'", "''", input$specialty)
     
@@ -85,59 +77,71 @@ server <- function(input, output, session) {
     dbGetQuery(con, query)
   })
   
-  
-
-  # Perform AutoARIMA Forecast
+  # Perform Prophet Forecast and Update Plotly with Confidence Intervals
   output$forecastPlot <- renderPlotly({
     data <- filtered_data() %>% 
       group_by(report_date) %>% 
       summarise(Total = sum(Current))
     
     if (nrow(data) > 0) {
-      # Convert data to time series
-      ts_data <- ts(data$Total, frequency = 52)  # Weekly data
+      # Convert data to time series and prepare Prophet data
+      prophet_data <- data.frame(ds = as.Date(data$report_date), y = data$Total)
+      model <- prophet(prophet_data)
       
-      # Apply AutoARIMA
-      model <- auto.arima(ts_data)
-      forecast_data <- forecast(model, h = 12)  # Forecast next 14 weeks
+      # Create future data frame and generate forecast
+      future <- make_future_dataframe(model, periods = 12, freq = "week")
+      forecast_data <- predict(model, future)
       
-      # Create data for Plotly
+      # Filter forecast data to only include dates after the last actual date
+      last_actual_date <- max(prophet_data$ds)
       forecast_df <- data.frame(
-        Date = seq(from = max(data$report_date) + 7, by = "week", length.out = 12),  # Generate future dates
-        Forecast = round(as.numeric(forecast_data$mean)),
-        Lower_80 = round(as.numeric(forecast_data$lower[, 1])),
-        Upper_80 = round(as.numeric(forecast_data$upper[, 1])),
-        Lower_95 = round(as.numeric(forecast_data$lower[, 2])),
-        Upper_95 = round(as.numeric(forecast_data$upper[, 2]))
+        Date = as.Date(forecast_data$ds),
+        Forecast = round(as.numeric(forecast_data$yhat)),
+        Lower_80 = round(as.numeric(forecast_data$yhat_lower)),  # Lower bound for confidence interval
+        Upper_80 = round(as.numeric(forecast_data$yhat_upper))   # Upper bound for confidence interval
+      )
+      filtered_forecast_df <- forecast_df[forecast_df$Date > last_actual_date, ]
+      
+      # Combine last actual value with the first forecast value
+      combined_data <- rbind(
+        data.frame(Date = last_actual_date, Total = tail(data$Total, 1)),  # Last actual point
+        data.frame(Date = filtered_forecast_df$Date, Total = filtered_forecast_df$Forecast)  # Forecasted values
       )
       
-      # Combine actual data for plotting and round values
+      # Create data for Plotly (actual + combined forecast)
       actual_df <- data.frame(
         Date = as.Date(data$report_date),
         Total = round(as.numeric(data$Total))
       )
       
-      # Plot using Flatly styling
+      # Plot using Plotly, connecting the last actual point to the first predicted point
       p <- plot_ly() %>%
         add_trace(data = actual_df, x = ~Date, y = ~Total, 
                   type = 'scatter', mode = 'lines+markers',
                   marker = list(color = "#007BFF", size = 8, line = list(color = '#CCCCCC', width = 2)),  # Flatly primary color
                   line = list(shape = 'spline', smoothing = 1.3, color = "#007BFF", width = 3),
                   name = "Actual") %>%
-        add_trace(data = forecast_df, x = ~Date, y = ~Forecast, 
+        add_trace(data = combined_data, x = ~Date, y = ~Total, 
                   type = 'scatter', mode = 'lines+markers',
                   marker = list(color = "#28A745", size = 8, line = list(color = '#CCCCCC', width = 2)),  # Flatly success color
                   line = list(shape = 'spline', smoothing = 1.3, color = "#28A745", width = 3),
                   name = "Forecast") %>%
-        add_ribbons(data = forecast_df, x = ~Date, ymin = ~Lower_80, ymax = ~Upper_80, 
-                    fillcolor = 'rgba(40, 167, 69, 0.2)', line = list(width = 0), name = "80% CI") %>%
-        add_ribbons(data = forecast_df, x = ~Date, ymin = ~Lower_95, ymax = ~Upper_95, 
-                    fillcolor = 'rgba(40, 167, 69, 0.4)', line = list(width = 0), name = "95% CI") %>% 
+        add_ribbons(data = filtered_forecast_df, x = ~Date, ymin = ~Lower_80, ymax = ~Upper_80, 
+                    fillcolor = 'rgba(40, 167, 69, 0.3)', line = list(width = 0), name = "80% CI") %>%
         layout(title = "",
-               xaxis = list(title = "", type = "date", tickangle = 45, tickfont = list(size = 12, color = 'black'), showgrid = FALSE, tickformat = '%d-%b-%y'),
-               yaxis = list(title = "", tickfont = list(size = 12, color = 'black'), tickformat = ".0f", showgrid = FALSE),  # Change format to whole numbers
-               paper_bgcolor = '#F8F9FA',  # Flatly light background
-               plot_bgcolor = '#F8F9FA',   # Flatly light background
+               xaxis = list(title = "", type = "date", tickangle = 45, 
+                            tickfont = list(size = 12, color = 'black'), 
+                            showgrid = FALSE, 
+                            tickformat = '%d-%b-%y'),
+               yaxis = list(title = "", 
+                            tickfont = list(size = 12, color = 'black'), 
+                            tickformat = ".0f",
+                            gridcolor = 'rgba(204, 204, 204, 0.2)',  # Light grey with transparency
+                            griddash = 'dash',  # This controls the gridline style
+                            gridwidth = 1,
+                            showgrid = TRUE),
+               paper_bgcolor = '#F8F9FA', 
+               plot_bgcolor = '#F8F9FA', 
                legend = list(font = list(color = 'black')), 
                font = list(size = 14),
                margin = list(b = 50)) %>%
@@ -147,49 +151,44 @@ server <- function(input, output, session) {
     }
   })
   
-  
-  
-  
-  
-  # Display forecasted values in a table
+  # Display only the newest 12 forecasted values in the table
   output$forecastTable <- renderTable({
     data <- filtered_data() %>% 
       group_by(report_date) %>% 
       summarise(Total = sum(Current))
     
     if (nrow(data) > 0) {
-      # Convert data to time series
-      ts_data <- ts(data$Total, frequency = 52)  # Weekly data
+      # Prepare data for Prophet (ds = date, y = value)
+      prophet_data <- data.frame(ds = as.Date(data$report_date), y = data$Total)
       
-      # Apply AutoARIMA
-      model <- auto.arima(ts_data)
-      forecast_data <- forecast(model, h = 12)  # Forecast next 4 weeks (14 days)
+      # Fit Prophet model
+      model <- prophet(prophet_data)
       
-      # Get the last available report date
-      last_report_date <- as.Date(data$report_date[nrow(data)])
+      # Create future data frame for 12 weeks
+      future <- make_future_dataframe(model, periods = 12, freq = "week")
       
-      # Generate actual dates for the next 14 days (for weekly forecast)
-      forecast_dates <- seq(last_report_date + 7, by = "week", length.out = 12)
+      # Generate forecast
+      forecast_data <- predict(model, future)
       
-      # Format the forecast dates to match Plotly formatting (e.g., "Oct-24")
-      formatted_dates <- format(forecast_dates, "%d-%b-%y")
+      # Filter forecast data to only include dates after the last actual date
+      last_actual_date <- max(prophet_data$ds)
+      filtered_forecast_data <- forecast_data[forecast_data$ds > last_actual_date, ]
       
-      # Return forecasted values with actual dates
+      # Extract the newest 12 forecasted points
       forecast_table <- data.frame(
-        Week = formatted_dates,
-        Forecast = as.integer(round(as.numeric(forecast_data$mean)))  # Round to nearest whole number
-      )
+        Week = format(as.Date(filtered_forecast_data$ds), "%d-%b-%y"),  # Format the dates
+        Forecast = as.integer(round(filtered_forecast_data$yhat))  # Round forecasted values to whole numbers
+      )[1:12, ]  # Only keep the first 12 rows (newest 12 predicted points)
       
       return(forecast_table)
     }
   })
   
-  
-  # Disconnect the database connection when the app is stopped
   onStop(function() {
     dbDisconnect(con, shutdown = TRUE)
   })
 }
+
 
 # Run the application 
 shinyApp(ui = ui, server = server)
