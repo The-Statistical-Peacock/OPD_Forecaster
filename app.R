@@ -187,6 +187,7 @@ server <- function(input, output, session) {
   onStop(function() {
     dbDisconnect(con, shutdown = TRUE)
   })
+  
 }
 
 
