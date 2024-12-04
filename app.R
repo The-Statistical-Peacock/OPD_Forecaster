@@ -86,7 +86,11 @@ server <- function(input, output, session) {
     if (nrow(data) > 0) {
       # Convert data to time series and prepare Prophet data
       prophet_data <- data.frame(ds = as.Date(data$report_date), y = data$Total)
-      model <- prophet(prophet_data)
+      model <- prophet(prophet_data, 
+                       n.changepoints = 5,
+                       daily.seasonality = TRUE,
+                       weekly.seasonality = TRUE,
+                       yearly.seasonality = TRUE)
       
       # Create future data frame and generate forecast
       future <- make_future_dataframe(model, periods = 12, freq = "week")
@@ -162,7 +166,11 @@ server <- function(input, output, session) {
       prophet_data <- data.frame(ds = as.Date(data$report_date), y = data$Total)
       
       # Fit Prophet model
-      model <- prophet(prophet_data)
+      model <- prophet(prophet_data,
+                       n.changepoints = 5,
+                       daily.seasonality = TRUE,
+                       weekly.seasonality = TRUE,
+                       yearly.seasonality = TRUE)
       
       # Create future data frame for 12 weeks
       future <- make_future_dataframe(model, periods = 12, freq = "week")
