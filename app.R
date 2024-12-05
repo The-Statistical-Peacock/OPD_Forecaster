@@ -53,7 +53,7 @@ server <- function(input, output, session) {
   
   # Populate Hospital dropdown dynamically and sort hospitals alphabetically
   hospitals_query <- 'SELECT DISTINCT "hospital name" FROM OPD ORDER BY "hospital name" ASC'
-  updateSelectInput(session, "hospital", choices = dbGetQuery(con, hospitals_query)$hospital name)
+  updateSelectInput(session, "hospital", choices = dbGetQuery(con, hospitals_query)$`hospital name`)
   
   # Reactive expression to update Specialty based on selected hospital
   observeEvent(input$hospital, {
