@@ -17,8 +17,8 @@ ui <- navbarPage(
   # Tab 1: AutoARIMA Results
   tabPanel(
     title = "AutoARIMA",
-    sidebarLayout(
-      sidebarPanel(
+    page_sidebar(
+      sidebar = sidebar(
         h4("Filters"),
         selectInput("hospital_arima", "Select Hospital:", choices = NULL),
         selectInput("specialty_arima", "Select Specialty:", choices = NULL),
@@ -36,8 +36,8 @@ ui <- navbarPage(
   # Tab 2: Prophet Results
   tabPanel(
     title = "Prophet",
-    sidebarLayout(
-      sidebarPanel(
+    page_sidebar(
+     sidebar = sidebar(
         h4("Filters"),
         selectInput("hospital_prophet", "Select Hospital:", choices = NULL),
         selectInput("specialty_prophet", "Select Specialty:", choices = NULL),
