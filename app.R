@@ -1,95 +1,97 @@
-# app.R
-
 # Required Libraries
 library(shiny)
-library(forecast)  
-library(duckdb)    
+library(forecast)
+library(duckdb)
 library(dplyr)
 library(thematic)
 library(plotly)
-library(ggplot2)   
-library(bslib)    
+library(ggplot2)
+library(bslib)
+library(prophet)
 
-
-# Define UI for the application with bslib theme
-ui <- page_sidebar(
-  # Apply bslib theme
-  theme = bs_theme(
-    version = 5,                   
-    bootswatch = "flatly",                
+# Define UI with NavbarPage for Multi-Page Application
+ui <- navbarPage(
+  title = "Time Series Predictions",
+  theme = bs_theme(version = 5, bootswatch = "flatly"), # Flatly theme
+  
+  # Tab 1: AutoARIMA Results
+  tabPanel(
+    title = "AutoARIMA",
+    sidebarLayout(
+      sidebarPanel(
+        h4("Filters"),
+        selectInput("hospital_arima", "Select Hospital:", choices = NULL),
+        selectInput("specialty_arima", "Select Specialty:", choices = NULL),
+        actionButton("predict_arima", "Predict Next 12 Weeks", class = 'btn-success')
+      ),
+      mainPanel(
+        tabsetPanel(
+          tabPanel("Plot", plotlyOutput("forecastPlot_arima")),
+          tabPanel("Forecast Table", tableOutput("forecastTable_arima"))
+        )
+      )
+    )
   ),
   
-  
-  # Sidebar content
-  sidebar = sidebar(
-    h4("Filters"),
-    selectInput("hospital", "Select Hospital:", choices = NULL),
-    selectInput("specialty", "Select Specialty:", choices = NULL),
-    actionButton("predict", "Predict Next 12 Weeks", class = 'btn-success')
-  ),
-  
-  # Main panel content with cards and columns
-  layout_columns(
-    col_widths = c(9, 3),  
-    
-    # First column: Card for plot
-    card(
-      card_header("AutoARIMA Prediction for Outpaitent Waiting List Numbers", style = "background-color: #18BC9C; color: white;"),
-      plotlyOutput("forecastPlot")
-    ),
-    
-    # Second column: Card for table
-    card(
-      card_header("Forecasted Values", style = "background-color: #18BC9C; color: white;"),
-      tableOutput("forecastTable")
+  # Tab 2: Prophet Results
+  tabPanel(
+    title = "Prophet",
+    sidebarLayout(
+      sidebarPanel(
+        h4("Filters"),
+        selectInput("hospital_prophet", "Select Hospital:", choices = NULL),
+        selectInput("specialty_prophet", "Select Specialty:", choices = NULL),
+        actionButton("predict_prophet", "Predict Next 12 Weeks", class = 'btn-success')
+      ),
+      mainPanel(
+        tabsetPanel(
+          tabPanel("Plot", plotlyOutput("forecastPlot_prophet")),
+          tabPanel("Forecast Table", tableOutput("forecastTable_prophet"))
+        )
+      )
     )
   )
 )
 
-# Modified server function with proper column name quoting
+# Server logic for AutoARIMA and Prophet Models
 server <- function(input, output, session) {
-  # Connect to DuckDB
   con <- dbConnect(duckdb::duckdb(), dbdir = "NTPF_WL.duckdb")
   
-  # Populate Hospital dropdown dynamically and sort hospitals alphabetically
+  # Populate dropdowns for both tabs
   hospitals_query <- 'SELECT DISTINCT "hospital name" FROM OPD ORDER BY "hospital name" ASC'
-  updateSelectInput(session, "hospital", choices = dbGetQuery(con, hospitals_query)$`hospital name`)
+  updateSelectInput(session, "hospital_arima", choices = dbGetQuery(con, hospitals_query)$`hospital name`)
+  updateSelectInput(session, "hospital_prophet", choices = dbGetQuery(con, hospitals_query)$`hospital name`)
   
-  # Reactive expression to update Specialty based on selected hospital
-  observeEvent(input$hospital, {
-    if (!is.null(input$hospital)) {
-      # Escape single quotes in the hospital name
-      safe_hospital_name <- gsub("'", "''", input$hospital)
-      
-      # Query to get specialties related to the selected hospital
-      specialties_query <- paste0(
-        'SELECT DISTINCT "Specialty" FROM OPD WHERE "hospital name" = \'', safe_hospital_name, '\' ORDER BY "Specialty" ASC'
-      )
-      specialties <- dbGetQuery(con, specialties_query)$Specialty
-      
-      # Update the Specialty selectInput based on the query result
-      updateSelectInput(session, "specialty", choices = specialties)
+  observeEvent(input$hospital_arima, {
+    if (!is.null(input$hospital_arima)) {
+      safe_hospital <- gsub("'", "''", input$hospital_arima)
+      query <- paste0('SELECT DISTINCT "Specialty" FROM OPD WHERE "hospital name" = \'', safe_hospital, '\' ORDER BY "Specialty" ASC')
+      updateSelectInput(session, "specialty_arima", choices = dbGetQuery(con, query)$Specialty)
     }
   })
   
-  # Reactive expression to fetch and filter the data based on user input
-  filtered_data <- eventReactive(input$predict, {
-    # Escape single quotes in the hospital and specialty names
-    safe_hospital_name <- gsub("'", "''", input$hospital)
-    safe_specialty <- gsub("'", "''", input$specialty)
-    
+  observeEvent(input$hospital_prophet, {
+    if (!is.null(input$hospital_prophet)) {
+      safe_hospital <- gsub("'", "''", input$hospital_prophet)
+      query <- paste0('SELECT DISTINCT "Specialty" FROM OPD WHERE "hospital name" = \'', safe_hospital, '\' ORDER BY "Specialty" ASC')
+      updateSelectInput(session, "specialty_prophet", choices = dbGetQuery(con, query)$Specialty)
+    }
+  })
+  
+  # AutoARIMA Logic
+  filtered_data_arima <- eventReactive(input$predict_arima, {
+    safe_hospital <- gsub("'", "''", input$hospital_arima)
+    safe_specialty <- gsub("'", "''", input$specialty_arima)
     query <- paste0(
-      'SELECT "report_date", "Current" FROM OPD WHERE "hospital name" = \'', safe_hospital_name,
+      'SELECT "report_date", "Current" FROM OPD WHERE "hospital name" = \'', safe_hospital,
       '\' AND "Specialty" = \'', safe_specialty, '\' ORDER BY "report_date"'
     )
     dbGetQuery(con, query)
   })
   
-  
-  
-  # Perform AutoARIMA Forecast
-  output$forecastPlot <- renderPlotly({
-    data <- filtered_data() %>% 
+  #output$forecasePlot_arima
+  output$forecastPlot_arima <- renderPlotly({
+    data <- filtered_data_arima() %>% 
       group_by(report_date) %>% 
       summarise(Total = sum(Current))
     
@@ -147,49 +149,67 @@ server <- function(input, output, session) {
     }
   })
   
-  
-  
-  
-  
-  # Display forecasted values in a table
-  output$forecastTable <- renderTable({
-    data <- filtered_data() %>% 
-      group_by(report_date) %>% 
-      summarise(Total = sum(Current))
-    
+  output$forecastTable_arima <- renderTable({
+    data <- filtered_data_arima() %>% group_by(report_date) %>% summarise(Total = sum(Current))
     if (nrow(data) > 0) {
-      # Convert data to time series
-      ts_data <- ts(data$Total, frequency = 52)  # Weekly data
-      
-      # Apply AutoARIMA
+      ts_data <- ts(data$Total, frequency = 52)
       model <- auto.arima(ts_data)
-      forecast_data <- forecast(model, h = 12)  # Forecast next 4 weeks (14 days)
+      forecast_data <- forecast(model, h = 12)
       
-      # Get the last available report date
-      last_report_date <- as.Date(data$report_date[nrow(data)])
-      
-      # Generate actual dates for the next 14 days (for weekly forecast)
-      forecast_dates <- seq(last_report_date + 7, by = "week", length.out = 12)
-      
-      # Format the forecast dates to match Plotly formatting (e.g., "Oct-24")
-      formatted_dates <- format(forecast_dates, "%d-%b-%y")
-      
-      # Return forecasted values with actual dates
-      forecast_table <- data.frame(
-        Week = formatted_dates,
-        Forecast = as.integer(round(as.numeric(forecast_data$mean)))  # Round to nearest whole number
+      forecast_df <- data.frame(
+        Week = seq(from = max(data$report_date) + 7, by = "week", length.out = 12),
+        Forecast = round(as.numeric(forecast_data$mean))
       )
-      
-      return(forecast_table)
+      forecast_df
     }
   })
   
+  # Prophet Logic
+  filtered_data_prophet <- eventReactive(input$predict_prophet, {
+    safe_hospital <- gsub("'", "''", input$hospital_prophet)
+    safe_specialty <- gsub("'", "''", input$specialty_prophet)
+    query <- paste0(
+      'SELECT "report_date", "Current" FROM OPD WHERE "hospital name" = \'', safe_hospital,
+      '\' AND "Specialty" = \'', safe_specialty, '\' ORDER BY "report_date"'
+    )
+    dbGetQuery(con, query)
+  })
   
-  # Disconnect the database connection when the app is stopped
+  output$forecastPlot_prophet <- renderPlotly({
+    data <- filtered_data_prophet() %>% group_by(report_date) %>% summarise(Total = sum(Current))
+    if (nrow(data) > 0) {
+      prophet_data <- data.frame(ds = as.Date(data$report_date), y = data$Total)
+      model <- prophet(prophet_data)
+      future <- make_future_dataframe(model, periods = 12, freq = "week")
+      forecast_data <- predict(model, future)
+      
+      forecast_df <- forecast_data %>% filter(ds > max(data$report_date))
+      plot_ly() %>%
+        add_lines(x = data$report_date, y = data$Total, name = "Actual") %>%
+        add_lines(x = forecast_df$ds, y = forecast_df$yhat, name = "Forecast")
+    }
+  })
+  
+  output$forecastTable_prophet <- renderTable({
+    data <- filtered_data_prophet() %>% group_by(report_date) %>% summarise(Total = sum(Current))
+    if (nrow(data) > 0) {
+      prophet_data <- data.frame(ds = as.Date(data$report_date), y = data$Total)
+      model <- prophet(prophet_data)
+      future <- make_future_dataframe(model, periods = 12, freq = "week")
+      forecast_data <- predict(model, future)
+      
+      forecast_df <- forecast_data %>% filter(ds > max(data$report_date)) %>%
+        select(Week = ds, Forecast = yhat) %>%
+        mutate(Week = format(Week, "%d-%b-%y"))
+      forecast_df
+    }
+  })
+  
+  # Disconnect database when app stops
   onStop(function() {
     dbDisconnect(con, shutdown = TRUE)
   })
 }
 
-# Run the application 
+# Run the application
 shinyApp(ui = ui, server = server)
