@@ -89,7 +89,7 @@ server <- function(input, output, session) {
     dbGetQuery(con, query)
   })
   
-  #output$forecasePlot_arima
+  # AutoARIMA Plot
   output$forecastPlot_arima <- renderPlotly({
     data <- filtered_data_arima() %>% 
       group_by(report_date) %>% 
@@ -149,18 +149,36 @@ server <- function(input, output, session) {
     }
   })
   
+  # AutoArima Table
   output$forecastTable_arima <- renderTable({
-    data <- filtered_data_arima() %>% group_by(report_date) %>% summarise(Total = sum(Current))
+    data <- filtered_data_arima() %>% 
+      group_by(report_date) %>% 
+      summarise(Total = sum(Current))
+    
     if (nrow(data) > 0) {
-      ts_data <- ts(data$Total, frequency = 52)
-      model <- auto.arima(ts_data)
-      forecast_data <- forecast(model, h = 12)
+      # Convert data to time series
+      ts_data <- ts(data$Total, frequency = 52)  # Weekly data
       
-      forecast_df <- data.frame(
-        Week = seq(from = max(data$report_date) + 7, by = "week", length.out = 12),
-        Forecast = round(as.numeric(forecast_data$mean))
+      # Apply AutoARIMA
+      model <- auto.arima(ts_data)
+      forecast_data <- forecast(model, h = 12)  # Forecast next 4 weeks (14 days)
+      
+      # Get the last available report date
+      last_report_date <- as.Date(data$report_date[nrow(data)])
+      
+      # Generate actual dates for the next 14 days (for weekly forecast)
+      forecast_dates <- seq(last_report_date + 7, by = "week", length.out = 12)
+      
+      # Format the forecast dates to match Plotly formatting (e.g., "Oct-24")
+      formatted_dates <- format(forecast_dates, "%d-%b-%y")
+      
+      # Return forecasted values with actual dates
+      forecast_table <- data.frame(
+        Week = formatted_dates,
+        Forecast = as.integer(round(as.numeric(forecast_data$mean)))  # Round to nearest whole number
       )
-      forecast_df
+      
+      return(forecast_table)
     }
   })
   
