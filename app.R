@@ -136,13 +136,22 @@ server <- function(input, output, session) {
         add_ribbons(data = forecast_df, x = ~Date, ymin = ~Lower_95, ymax = ~Upper_95, 
                     fillcolor = 'rgba(40, 167, 69, 0.4)', line = list(width = 0), name = "95% CI") %>% 
         layout(title = "",
-               xaxis = list(title = "", type = "date", tickangle = 45, tickfont = list(size = 12, color = 'black'), showgrid = FALSE, tickformat = '%d-%b-%y'),
-               yaxis = list(title = "", tickfont = list(size = 12, color = 'black'), tickformat = ".0f", showgrid = FALSE),  # Change format to whole numbers
-               paper_bgcolor = '#F8F9FA',  # Flatly light background
-               plot_bgcolor = '#F8F9FA',   # Flatly light background
+               xaxis = list(title = "", type = "date", tickangle = 45, 
+                            tickfont = list(size = 12, color = 'black'), 
+                            showgrid = FALSE, 
+                            tickformat = '%d-%b-%y'),
+               yaxis = list(title = "", 
+                            tickfont = list(size = 12, color = 'black'), 
+                            tickformat = ".0f",
+                            gridcolor = 'rgba(204, 204, 204, 0.2)',  # Light grey with transparency
+                            griddash = 'dash',  # This controls the gridline style
+                            gridwidth = 1,
+                            showgrid = TRUE),
+               paper_bgcolor = '#F8F9FA', 
+               plot_bgcolor = '#F8F9FA', 
                legend = list(font = list(color = 'black')), 
                font = list(size = 14),
-               margin = list(b = 50)) %>%
+               margin = list(b = 50))  %>%
         config(displayModeBar = FALSE)
       
       p
@@ -194,17 +203,79 @@ server <- function(input, output, session) {
   })
   
   output$forecastPlot_prophet <- renderPlotly({
-    data <- filtered_data_prophet() %>% group_by(report_date) %>% summarise(Total = sum(Current))
+    data <- filtered_data_prophet() %>% 
+      group_by(report_date) %>% 
+      summarise(Total = sum(Current))
+    
     if (nrow(data) > 0) {
+      # Convert data to time series and prepare Prophet data
       prophet_data <- data.frame(ds = as.Date(data$report_date), y = data$Total)
-      model <- prophet(prophet_data)
+      model <- prophet(prophet_data, 
+                       n.changepoints = 5,
+                       daily.seasonality = TRUE,
+                       weekly.seasonality = TRUE,
+                       yearly.seasonality = TRUE)
+      
+      # Create future data frame and generate forecast
       future <- make_future_dataframe(model, periods = 12, freq = "week")
       forecast_data <- predict(model, future)
       
-      forecast_df <- forecast_data %>% filter(ds > max(data$report_date))
-      plot_ly() %>%
-        add_lines(x = data$report_date, y = data$Total, name = "Actual") %>%
-        add_lines(x = forecast_df$ds, y = forecast_df$yhat, name = "Forecast")
+      # Filter forecast data to only include dates after the last actual date
+      last_actual_date <- max(prophet_data$ds)
+      forecast_df <- data.frame(
+        Date = as.Date(forecast_data$ds),
+        Forecast = round(as.numeric(forecast_data$yhat)),
+        Lower_80 = round(as.numeric(forecast_data$yhat_lower)),  # Lower bound for confidence interval
+        Upper_80 = round(as.numeric(forecast_data$yhat_upper))   # Upper bound for confidence interval
+      )
+      filtered_forecast_df <- forecast_df[forecast_df$Date > last_actual_date, ]
+      
+      # Combine last actual value with the first forecast value
+      combined_data <- rbind(
+        data.frame(Date = last_actual_date, Total = tail(data$Total, 1)),  # Last actual point
+        data.frame(Date = filtered_forecast_df$Date, Total = filtered_forecast_df$Forecast)  # Forecasted values
+      )
+      
+      # Create data for Plotly (actual + combined forecast)
+      actual_df <- data.frame(
+        Date = as.Date(data$report_date),
+        Total = round(as.numeric(data$Total))
+      )
+      
+      # Plot using Plotly, connecting the last actual point to the first predicted point
+      p <- plot_ly() %>%
+        add_trace(data = actual_df, x = ~Date, y = ~Total, 
+                  type = 'scatter', mode = 'lines+markers',
+                  marker = list(color = "#007BFF", size = 8, line = list(color = '#CCCCCC', width = 2)),  # Flatly primary color
+                  line = list(shape = 'spline', smoothing = 1.3, color = "#007BFF", width = 3),
+                  name = "Actual") %>%
+        add_trace(data = combined_data, x = ~Date, y = ~Total, 
+                  type = 'scatter', mode = 'lines+markers',
+                  marker = list(color = "#28A745", size = 8, line = list(color = '#CCCCCC', width = 2)),  # Flatly success color
+                  line = list(shape = 'spline', smoothing = 1.3, color = "#28A745", width = 3),
+                  name = "Forecast") %>%
+        add_ribbons(data = filtered_forecast_df, x = ~Date, ymin = ~Lower_80, ymax = ~Upper_80, 
+                    fillcolor = 'rgba(40, 167, 69, 0.3)', line = list(width = 0), name = "80% CI") %>%
+        layout(title = "",
+               xaxis = list(title = "", type = "date", tickangle = 45, 
+                            tickfont = list(size = 12, color = 'black'), 
+                            showgrid = FALSE, 
+                            tickformat = '%d-%b-%y'),
+               yaxis = list(title = "", 
+                            tickfont = list(size = 12, color = 'black'), 
+                            tickformat = ".0f",
+                            gridcolor = 'rgba(204, 204, 204, 0.2)',  # Light grey with transparency
+                            griddash = 'dash',  # This controls the gridline style
+                            gridwidth = 1,
+                            showgrid = TRUE),
+               paper_bgcolor = '#F8F9FA', 
+               plot_bgcolor = '#F8F9FA', 
+               legend = list(font = list(color = 'black')), 
+               font = list(size = 14),
+               margin = list(b = 50)) %>%
+        config(displayModeBar = FALSE)
+      
+      p
     }
   })
   
