@@ -280,17 +280,38 @@ server <- function(input, output, session) {
   })
   
   output$forecastTable_prophet <- renderTable({
-    data <- filtered_data_prophet() %>% group_by(report_date) %>% summarise(Total = sum(Current))
+    data <- filtered_data_prophet() %>% 
+      group_by(report_date) %>% 
+      summarise(Total = sum(Current))
+    
     if (nrow(data) > 0) {
+      # Prepare data for Prophet (ds = date, y = value)
       prophet_data <- data.frame(ds = as.Date(data$report_date), y = data$Total)
-      model <- prophet(prophet_data)
+      
+      # Fit Prophet model
+      model <- prophet(prophet_data,
+                       n.changepoints = 5,
+                       daily.seasonality = TRUE,
+                       weekly.seasonality = TRUE,
+                       yearly.seasonality = TRUE)
+      
+      # Create future data frame for 12 weeks
       future <- make_future_dataframe(model, periods = 12, freq = "week")
+      
+      # Generate forecast
       forecast_data <- predict(model, future)
       
-      forecast_df <- forecast_data %>% filter(ds > max(data$report_date)) %>%
-        select(Week = ds, Forecast = yhat) %>%
-        mutate(Week = format(Week, "%d-%b-%y"))
-      forecast_df
+      # Filter forecast data to only include dates after the last actual date
+      last_actual_date <- max(prophet_data$ds)
+      filtered_forecast_data <- forecast_data[forecast_data$ds > last_actual_date, ]
+      
+      # Extract the newest 12 forecasted points
+      forecast_table <- data.frame(
+        Week = format(as.Date(filtered_forecast_data$ds), "%d-%b-%y"),  # Format the dates
+        Forecast = as.integer(round(filtered_forecast_data$yhat))  # Round forecasted values to whole numbers
+      )[1:12, ]  # Only keep the first 12 rows (newest 12 predicted points)
+      
+      return(forecast_table)
     }
   })
   
